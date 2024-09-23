@@ -2,6 +2,19 @@
 
 ---
 
+## Table of Contents
+
+- [What is Quarkus?](#what-is-quarkus)
+- [Differences Between GraalVM and OpenJDK HotSpot](#differences-between-graalvm-and-openjdk-hotspot)
+- [What is Reactive Architecture Style or Reactive Programming?](#what-is-reactive-architecture-style-or-reactive-programming)
+- [Imperative vs Declarative Programming](#imperative-vs-declarative-programming)
+- [Blocking vs Non-Blocking](#blocking-vs-non-blocking)
+- [Asynchronous vs Non-Blocking](#asynchronous-vs-non-blocking)
+- [CDI (Contexts and Dependency Injection) in Quarkus](#cdi-contexts-and-dependency-injection-in-quarkus)
+- [MicroProfile in Quarkus](#microprofile-in-quarkus)
+
+---
+
 ### Important Links
 
 - [RedHat Quarkus](https://developers.redhat.com/learn/quarkus)
@@ -108,3 +121,379 @@ Reactive programming is programming with asynchronous data streams.Reactive Syst
 - **Asynchronous**: In the asynchronous example, the operation starts, and you immediately get control back as well. However, instead of checking repeatedly if the operation is done, you simply provide a callback that gets triggered when the operation completes. The flow of your program doesn’t pause to wait or check the operation; it moves on, and the result is handled when ready, making the process completely asynchronous.
 
 - **Non-Blocking**: In the non-blocking example, the operation starts, and you immediately get control back to do other work. You might keep checking if the operation is done, but you're not waiting idly. You might still check synchronously (like in a loop) if the data is ready, which is why non-blocking can sometimes be synchronous (you are just not blocking while checking).
+
+---
+
+## CDI (Contexts and Dependency Injection) in Quarkus
+
+**CDI (Contexts and Dependency Injection)** is a key component in Quarkus that provides a standardized mechanism for managing dependencies and lifecycle events in Java applications. CDI is part of the **Jakarta EE** specification (formerly Java EE), and in Quarkus, it's used for implementing **Inversion of Control (IoC)** and **Dependency Injection (DI)**, allowing developers to build loosely coupled, maintainable applications.
+
+### Inversion of Control (IoC)
+Inversion of Control (IoC) is a design principle in software engineering where the control of objects or portions of a program is transferred from the developer's code to a framework or external entity. This allows for greater flexibility, modularity, and testability by decoupling the execution flow from the logic of the components.
+
+#### Key Concepts of IoC
+- Traditional Control Flow: In traditional programming, the developer controls how and when objects are instantiated and how they interact. For example, if you want a class to use another class, you would instantiate it directly in your code.
+- Inversion of Control: In IoC, the control of creating and managing the lifecycle of objects is transferred to a framework or container. The framework decides when to create objects, inject dependencies, and manage the application's lifecycle. This "inversion" refers to the transfer of responsibility from the programmer to the framework. Instead of manually creating dependencies, a framework (like Spring, CDI in Quarkus, etc.) handles that for you. The key part is that the framework injects the dependencies where needed.
+
+#### IoC in Quarkus:
+- **Dependency Injection (DI)**: The most common implementation of IoC is Dependency Injection, where the framework injects required dependencies into objects rather than objects creating dependencies themselves.
+    - Constructor Injection: Dependencies are provided via constructor arguments.
+    - Setter Injection: Dependencies are provided via setter methods.
+    - Field Injection: Dependencies are injected directly into fields.
+      ```java
+        import javax.inject.Inject;
+        import javax.enterprise.context.ApplicationScoped;
+        
+        @ApplicationScoped
+        public class MyService {
+        public void process() {
+        System.out.println("Service is processing...");
+        }
+        }
+        
+        @ApplicationScoped
+        public class MyApplication {
+        
+        @Inject
+        MyService service;  // IoC: Service instance is injected automatically
+        
+        public void start() {
+            service.process();
+        }
+        }
+      ```
+
+### How CDI Works in Quarkus
+
+#### 1. Dependency Injection (DI)
+CDI allows you to inject dependencies (objects) into your classes without needing to manage the instantiation and lifecycle of these objects manually. This makes your application modular and easily testable.
+
+##### Example: Basic CDI Dependency Injection
+```java
+import javax.inject.Inject;
+import javax.enterprise.context.ApplicationScoped;
+
+@ApplicationScoped
+public class GreetingService {
+    public String greet(String name) {
+        return "Hello, " + name;
+    }
+}
+
+@ApplicationScoped
+public class Greeter {
+    // Inject the GreetingService dependency
+    @Inject
+    GreetingService greetingService;
+
+    public void sayHello() {
+        System.out.println(greetingService.greet("Quarkus"));
+    }
+}
+```
+In the example above:
+- The `@Inject` annotation is used to inject an instance of `GreetingService` into the `Greeter` class.
+- Quarkus (through CDI) will handle the instantiation of `GreetingService` and manage its lifecycle.
+
+#### 2. Lifecycle and Scopes
+CDI provides different lifecycle scopes, and Quarkus uses these to manage how beans are created and destroyed.
+
+##### Common CDI Scopes in Quarkus:
+- **@ApplicationScoped**: The bean is created once for the entire application and shared across all requests (singleton).
+- **@RequestScoped**: A new instance is created for each HTTP request and destroyed at the end of the request.
+- **@SessionScoped**: A bean tied to a user session (typically for web applications).
+- **@Dependent**: The default scope where a new instance is created every time the bean is injected.
+
+##### Example:
+```java
+import javax.enterprise.context.RequestScoped;
+
+@RequestScoped
+public class RequestBean {
+    // This bean will have a new instance for every request
+}
+```
+
+#### 3. Qualifiers
+Qualifiers allow you to inject specific implementations of an interface or class when multiple beans of the same type exist.
+
+##### Example: Using Qualifiers
+```java
+import javax.enterprise.inject.Default;
+import javax.enterprise.inject.Alternative;
+import javax.inject.Inject;
+
+@Default
+@ApplicationScoped
+public class StandardGreeting implements GreetingService {
+    public String greet(String name) {
+        return "Hello, " + name;
+    }
+}
+
+@Alternative
+@ApplicationScoped
+public class CasualGreeting implements GreetingService {
+    public String greet(String name) {
+        return "Hey, " + name;
+    }
+}
+
+@Inject
+@Default
+GreetingService greetingService; // Injects StandardGreeting
+```
+
+In this case, the `@Default` qualifier is used to select the `StandardGreeting` implementation, and `@Alternative` is used to define an alternative, which can be activated under certain conditions.
+
+#### 4. Producer Methods
+Sometimes, you may need to create beans dynamically or configure them at runtime. In such cases, CDI provides **producer methods** that allow you to define how beans are instantiated.
+
+##### Example: Producer Method in CDI
+```java
+import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.inject.Produces;
+
+@ApplicationScoped
+public class ConfigProducer {
+    @Produces
+    @ApplicationScoped
+    public Config createConfig() {
+        return new Config("production");
+    }
+}
+```
+Here, the `@Produces` annotation is used to define a method that produces a bean of type `Config`. The `Config` object is then available for injection wherever needed.
+
+#### 5. Events
+CDI provides an **event system** that allows beans to interact in a decoupled manner. Components can fire events, and others can observe and respond to these events.
+
+##### Example: Firing and Observing Events
+```java
+import javax.enterprise.event.Event;
+import javax.enterprise.event.Observes;
+import javax.inject.Inject;
+
+public class MessageService {
+
+    @Inject
+    Event<String> messageEvent;
+
+    public void sendMessage(String message) {
+        messageEvent.fire(message); // Fire an event
+    }
+}
+
+public class MessageListener {
+    
+    public void onMessage(@Observes String message) {
+        System.out.println("Received message: " + message); // Observes the event
+    }
+}
+```
+In this example:
+- The `MessageService` fires an event containing a message.
+- The `MessageListener` observes the event and responds when the message is fired.
+
+#### 6. Interceptors and Decorators
+CDI allows you to use interceptors and decorators for cross-cutting concerns like logging, security, or transaction management.
+
+##### Example: Using Interceptors
+```java
+import javax.interceptor.AroundInvoke;
+import javax.interceptor.Interceptor;
+import javax.interceptor.InvocationContext;
+
+@Interceptor
+@Logged // Custom annotation for logging
+public class LoggingInterceptor {
+    
+    @AroundInvoke
+    public Object logMethodInvocation(InvocationContext context) throws Exception {
+        System.out.println("Calling method: " + context.getMethod().getName());
+        return context.proceed(); // Proceed with the original method call
+    }
+}
+```
+In this example, the interceptor logs method invocations for all methods annotated with `@Logged`.
+
+#### 7. Lazy Loading
+Quarkus leverages CDI's support for lazy loading, ensuring beans are only instantiated when they are needed, improving performance and resource utilization.
+
+#### 8. Integration with Quarkus
+Quarkus optimizes CDI to work well with its **GraalVM native compilation**, which strips down unnecessary reflection and proxy overheads, resulting in faster startup times and lower memory usage.
+
+### Conclusion
+In Quarkus, CDI provides a powerful way to manage dependencies, lifecycle, and interactions between components in a cloud-native, microservices-based architecture. Its integration in Quarkus is lightweight, efficient, and highly optimized for environments like Kubernetes, helping developers focus on business logic while handling concerns such as dependency injection, event handling, and lifecycle management.
+
+---
+
+## MicroProfile in Quarkus
+
+**MicroProfile** in Quarkus is a set of enterprise Java standards and specifications that focus on building cloud-native, lightweight, and optimized microservices. The MicroProfile specification is designed to work alongside the Java EE (now Jakarta EE) platform but is specifically tailored for developing microservices with features such as fault tolerance, health checks, metrics, and configuration.
+Quarkus implements the MicroProfile specification, allowing developers to leverage these features to build highly scalable and resilient microservices while maintaining a lightweight runtime and fast startup times.
+Eclipse MicroProfile is a framework that helps developers build microservices and cloud-native applications for enterprise Java. It's an open source project that aims to simplify the development of microservices and cloud deployment.
+
+### Key MicroProfile Features in Quarkus
+
+Here’s a breakdown of the key MicroProfile features available in Quarkus:
+
+#### 1. MicroProfile Config
+- **Purpose**: Simplifies externalized configuration of applications.
+- **Concept**: MicroProfile Config allows you to inject configuration values into your application from different sources (environment variables, system properties, or custom properties files).
+- **Quarkus Example**:
+  ```java
+  @Inject
+  @ConfigProperty(name = "my.custom.property", defaultValue = "defaultValue")
+  String myProperty;
+  ```
+
+- **Benefits**:
+    - Enables flexibility by allowing configuration changes without modifying the application.
+    - Supports hierarchical configurations across environments.
+
+#### 2. MicroProfile Health
+- **Purpose**: Provides endpoints to report the health status of an application.
+- **Concept**: This feature allows applications to expose their health status (e.g., database connectivity, external services) through a `/health` endpoint.
+- **Quarkus Example**:
+  ```java
+  @Readiness
+  @ApplicationScoped
+  public class DatabaseHealthCheck implements HealthCheck {
+      @Override
+      public HealthCheckResponse call() {
+          return HealthCheckResponse.up("Database is up");
+      }
+  }
+  ```
+
+- **Benefits**:
+    - Useful for Kubernetes or OpenShift environments to perform liveliness and readiness probes.
+    - Ensures that applications are only exposed when they are in a healthy state.
+
+#### 3. MicroProfile Metrics
+- **Purpose**: Collects and exposes metrics about the application.
+- **Concept**: It allows developers to monitor the performance and resource usage of their application by exposing data like memory usage, CPU, response times, and more via a `/metrics` endpoint.
+- **Quarkus Example**:
+  ```java
+  @Counted(name = "requestCount", description = "How many requests have been processed")
+  public String process() {
+      return "Processed";
+  }
+  ```
+
+- **Benefits**:
+    - Integrates easily with monitoring systems such as Prometheus.
+    - Helps in observing real-time performance and behavior of microservices.
+
+#### 4. MicroProfile Fault Tolerance
+- **Purpose**: Adds resilience to microservices through patterns like retries, circuit breakers, timeouts, and bulkheads.
+- **Concept**: Allows developers to create resilient microservices by defining how their applications should handle failures of downstream systems or external dependencies.
+- **Quarkus Example**:
+  ```java
+  @ApplicationScoped
+  public class ExternalService {
+      
+      @Retry(maxRetries = 3)
+      @Timeout(500)
+      @Fallback(fallbackMethod = "fallbackResponse")
+      public String callExternalService() {
+          // External service call logic
+      }
+      
+      public String fallbackResponse() {
+          return "Fallback response";
+      }
+  }
+  ```
+
+- **Benefits**:
+    - Reduces the risk of cascading failures in a distributed system.
+    - Improves the robustness of applications by handling failures gracefully.
+
+#### 5. MicroProfile JWT Propagation
+- **Purpose**: Propagates JSON Web Tokens (JWT) between microservices for authentication and authorization.
+- **Concept**: JWT tokens are used to secure microservices, and this feature ensures that tokens can be validated and propagated across services in a secure manner.
+- **Quarkus Example**:
+  ```java
+  @RolesAllowed("user")
+  @GET
+  public String getSecureResource(@Context SecurityContext securityContext) {
+      Principal userPrincipal = securityContext.getUserPrincipal();
+      return "Hello, " + userPrincipal.getName();
+  }
+  ```
+
+- **Benefits**:
+    - Simplifies the implementation of security in microservices.
+    - Provides a standardized way of handling identity and permissions across services.
+
+#### 6. MicroProfile OpenAPI
+- **Purpose**: Automatically generates OpenAPI documentation for RESTful endpoints.
+- **Concept**: OpenAPI provides a specification for documenting RESTful APIs. MicroProfile OpenAPI helps developers generate API documentation without needing to write it manually.
+- **Quarkus Example**:
+  ```java
+  @Path("/api")
+  public class MyResource {
+      
+      @Operation(summary = "Get details", description = "Gets the details of an item.")
+      @GET
+      public String getItem() {
+          return "Item";
+      }
+  }
+  ```
+
+    - The documentation is automatically generated and exposed via a `/openapi` endpoint.
+
+- **Benefits**:
+    - Provides clear API documentation for developers and users of the API.
+    - Helps in understanding API endpoints, request/response formats, and error handling.
+
+#### 7. MicroProfile REST Client
+- **Purpose**: Simplifies the consumption of external REST services.
+- **Concept**: It allows developers to create type-safe clients for consuming REST APIs, using annotated interfaces to represent the external services.
+- **Quarkus Example**:
+  ```java
+  @RegisterRestClient
+  public interface MyRestClient {
+      @GET
+      @Path("/items")
+      List<Item> getItems();
+  }
+
+  @Inject
+  @RestClient
+  MyRestClient myRestClient;
+  ```
+
+- **Benefits**:
+    - Makes REST API calls more manageable by abstracting boilerplate code.
+    - Enables easy integration with external services and APIs.
+
+#### 8. MicroProfile OpenTracing
+- **Purpose**: Provides distributed tracing capabilities to trace requests across microservices.
+- **Concept**: Allows tracing the flow of requests as they travel through multiple microservices, helping to identify bottlenecks or issues in distributed systems.
+- **Quarkus Example**:
+    - Quarkus automatically enables OpenTracing for tracing service calls if the appropriate dependency is included.
+
+- **Benefits**:
+    - Enhances observability in complex, distributed microservices environments.
+    - Helps in troubleshooting performance issues across services.
+
+#### 9. MicroProfile Context Propagation
+- **Purpose**: Propagates context (e.g., security, transaction, etc.) across different threads in an asynchronous execution environment.
+- **Concept**: Allows the current context (like security credentials or transaction boundaries) to be propagated from one thread to another, enabling asynchronous and reactive programming patterns.
+- **Benefits**:
+    - Simplifies asynchronous programming in microservices.
+    - Ensures consistency in context when executing code across different threads.
+
+### Why MicroProfile in Quarkus?
+
+MicroProfile makes it easier to build **enterprise-grade microservices** by providing a set of essential features like configuration management, monitoring, security, fault tolerance, and more. In Quarkus, these features are optimized to work with minimal overhead and maximum performance.
+- **Cloud-Native Ready**: MicroProfile is tailored for developing microservices that will run in cloud environments like Kubernetes, and Quarkus provides built-in integrations for deployment to Kubernetes, OpenShift, and other platforms.
+- **Optimized for Microservices**: MicroProfile's features focus on the needs of microservices architectures, such as handling service failures, monitoring, health checks, and more, which are key in distributed systems.
+
+Quarkus brings the power of **MicroProfile** to developers by implementing these standards in a lightweight, optimized framework. By using MicroProfile in Quarkus, developers can leverage a variety of specifications that are essential for building robust, scalable, and cloud-native microservices. It allows you to focus on your business logic while Quarkus manages the rest — from configuration and health checks to security, tracing, and resilience.
+
+---
